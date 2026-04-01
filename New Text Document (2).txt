@@ -1,0 +1,254 @@
+## old main.py file
+
+import pandas as pd
+
+#read dataset
+df = pd.read_csv(r"data/UCI_Credit_Data.csv")
+
+#delete the id colum since it doesn't provide any useful information for the model
+df = df.drop("ID", axis=1)
+
+#check the dataset
+print(df.head())
+print(df.info())
+print(df.describe())
+
+#check for missing values
+print(df['default.payment.next.month'].value_counts())
+print(df['default.payment.next.month'].value_counts(normalize=True))
+
+#check for correlation with the target variable
+print(df.corr()['default.payment.next.month'].sort_values(ascending=False))
+
+
+#create new features based on the existing ones
+df['avg_bill_amt'] = df[['BILL_AMT1','BILL_AMT2','BILL_AMT3','BILL_AMT4','BILL_AMT5','BILL_AMT6']].mean(axis=1)
+
+
+#credit utilization ratio: avg_bill_amt / LIMIT_BAL
+df['credit_utilization'] = df['avg_bill_amt'] / df['LIMIT_BAL']
+df['avg_pay_delay'] = df[['PAY_0','PAY_2','PAY_3','PAY_4','PAY_5','PAY_6']].mean(axis=1)
+
+
+#Train/Test Split
+from sklearn.model_selection import train_test_split
+
+X = df.drop('default.payment.next.month', axis=1)
+y = df['default.payment.next.month']
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y
+)
+
+
+#Feature Scaling
+from sklearn.preprocessing import StandardScaler
+
+scaler = StandardScaler()
+
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+
+#Model Training - Train Logistic Regression
+
+# from sklearn.linear_model import LogisticRegression
+# model = LogisticRegression(max_iter=1000)
+# model.fit(X_train_scaled, y_train)
+
+#weight is balanced
+from sklearn.linear_model import LogisticRegression
+
+model = LogisticRegression(
+    max_iter=1000,
+    class_weight='balanced'
+)
+
+model.fit(X_train_scaled, y_train)
+
+#Model Evaluation - Evaluate Properly
+from sklearn.metrics import classification_report, roc_auc_score
+
+y_pred = model.predict(X_test_scaled)
+y_prob = model.predict_proba(X_test_scaled)[:, 1]
+
+print(classification_report(y_test, y_pred))
+print("ROC-AUC:", roc_auc_score(y_test, y_prob))
+
+#Import and Train XGBoost
+
+from xgboost import XGBClassifier
+from sklearn.metrics import classification_report, roc_auc_score
+
+xgb_model = XGBClassifier(
+    n_estimators=200,
+    max_depth=4,
+    learning_rate=0.05,
+    scale_pos_weight= (len(y_train) - sum(y_train)) / sum(y_train),
+    random_state=42,
+    use_label_encoder=False,
+    eval_metric='logloss'
+)
+
+xgb_model.fit(X_train, y_train)
+
+y_pred_xgb = xgb_model.predict(X_test)
+y_prob_xgb = xgb_model.predict_proba(X_test)[:, 1]
+
+print("XGBoost Results:")
+print(classification_report(y_test, y_pred_xgb))
+print("ROC-AUC:", roc_auc_score(y_test, y_prob_xgb))
+
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+feature_importance = pd.Series(
+    xgb_model.feature_importances_,
+    index=X_train.columns
+).sort_values(ascending=False)
+
+print(feature_importance.head(10))
+
+feature_importance.head(10).plot(kind='bar')
+plt.title("Top 10 Feature Importance - XGBoost")
+plt.show()
+
+
+#Create Main Training Runner
+
+from src.preprocessing import load_data, split_data
+from src.feature_engineering import add_engineered_features
+from src.train_model import train_xgboost, evaluate_model, save_model
+
+def main():
+
+    df = load_data("data/UCI_Credit_Data.csv")
+    df = add_engineered_features(df)
+
+    X_train, X_test, y_train, y_test = split_data(df)
+
+    model = train_xgboost(X_train, y_train)
+
+    evaluate_model(model, X_test, y_test)
+
+    save_model(model)
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+
+#odl app.py
+import streamlit as st
+import requests
+import pandas as pd
+
+st.set_page_config(page_title="Credit Risk Dashboard", layout="wide")
+
+st.title("🏦 AI-Powered Credit Risk Assessment System")
+st.markdown("Enterprise-grade credit risk scoring aligned with banking standards.")
+
+# ----------------------------
+# Customer Profile Section
+# ----------------------------
+
+st.header("Customer Profile")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    limit_bal = st.number_input("Credit Limit", value=50000)
+
+with col2:
+    age = st.slider("Age", 18, 75, 30)
+
+with col3:
+    education = st.selectbox(
+    "Education Level",
+    ["Graduate School", "University", "High School", "Others"]
+)
+
+# ----------------------------
+# Financial Behavior
+# ----------------------------
+
+st.header("Financial Behavior (Last 6 Months)")
+
+col4, col5, col6 = st.columns(3)
+
+with col4:
+    avg_bill = st.number_input("Average Monthly Bill Amount", value=10000)
+
+with col5:
+    avg_payment = st.number_input("Average Monthly Payment Amount", value=10000)
+
+with col6:
+    max_delay = st.slider("Maximum Payment Delay (Months)", -1, 6, 0)
+
+# ----------------------------
+# Predict Button
+# ----------------------------
+
+if st.button("🔍 Assess Credit Risk"):
+
+    data = {
+        "LIMIT_BAL": limit_bal,
+        "SEX": 1,
+        "EDUCATION": education,
+        "MARRIAGE": 1,
+        "AGE": age,
+        "PAY_0": max_delay,
+        "PAY_2": max_delay,
+        "PAY_3": max_delay,
+        "PAY_4": max_delay,
+        "PAY_5": max_delay,
+        "PAY_6": max_delay,
+        "BILL_AMT1": avg_bill,
+        "BILL_AMT2": avg_bill,
+        "BILL_AMT3": avg_bill,
+        "BILL_AMT4": avg_bill,
+        "BILL_AMT5": avg_bill,
+        "BILL_AMT6": avg_bill,
+        "PAY_AMT1": avg_payment,
+        "PAY_AMT2": avg_payment,
+        "PAY_AMT3": avg_payment,
+        "PAY_AMT4": avg_payment,
+        "PAY_AMT5": avg_payment,
+        "PAY_AMT6": avg_payment
+    }
+
+    response = requests.post("http://127.0.0.1:8000/predict", json=data)
+    result = response.json()
+
+    st.divider()
+
+    st.subheader("📊 Risk Assessment Result")
+
+    st.metric("Risk Score", f"{result['risk_score']}/100")
+    st.metric("Probability of Default", result['default_probability'])
+
+    if result["decision"] == "Approve":
+        st.success(f"✅ Decision: {result['decision']}")
+    elif result["decision"] == "Manual Review Required":
+        st.warning(f"⚠️ Decision: {result['decision']}")
+    else:
+        st.error(f"❌ Decision: {result['decision']}")
+
+    st.markdown(f"**Reason:** {result['reason']}")
+
+    st.subheader("🔎 Key Risk Drivers")
+
+    for feature, value in result["top_risk_drivers"].items():
+        impact = "Increased Risk" if value > 0 else "Reduced Risk"
+        st.write(f"- {feature}: {impact}")
