@@ -21,3 +21,7 @@ The system is built as a full-stack ML application with a Streamlit dashboard, F
 ---
 
 ## Output
+![](images/output1.png)
+![](images/output2.png)
+![](images/output3.png)
+![](images/output4.png)
