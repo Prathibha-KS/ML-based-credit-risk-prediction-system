@@ -16,7 +16,7 @@ The system is built as a full-stack ML application with a Streamlit dashboard, F
 ---
 
 ## 🔄 Workflow
-  
+!(images/workflow.png)
 
 ---
 
